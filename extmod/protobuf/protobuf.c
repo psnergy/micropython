@@ -85,11 +85,46 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
     /* pb_ostream_t pb_stream = pb_ostream_from_buffer(buffer, sizeof(buffer)); */
     
 }
+
+int get_msg_id(mp_obj_t msg)
+{    
+    const char m2sMDR_req[] = "m2s_MDR_request",
+	s2mMDR_req_ACK[] = "s2m_MDR_req_ACK",
+	m2sMDR_res_CTS[] = "m2s_MDR_res_CTS",
+	s2mMDR_response[] = "s2m_MDR_response";
+    
+    int id = 0; /* Default case is no matching ID */
+    
+    const char *msg_buf;
+    msg_buf = mp_obj_str_get_str(msg);
+    printf("%s\n", msg_buf);
+    if (strcmp(msg_buf, m2sMDR_req) == 0)
+	id = 1;
+    else if (strcmp(msg_buf, s2mMDR_req_ACK) == 0)
+	id = 2;
+    else if (strcmp(msg_buf, m2sMDR_res_CTS) == 0)
+	id = 3;
+    else if (strcmp(msg_buf, s2mMDR_response) == 0)
+	id = 4;
+    return id;
+}
+
+STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {
+    int msg_id = get_msg_id(msg_str);
+    
+    return mp_obj_new_int(get_msg_id(msg_str));
+}
+
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
+
 STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
     { MP_ROM_QSTR(MP_QSTR_encode), MP_ROM_PTR(&protobuf_encode_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pb_enc), MP_ROM_PTR(&pb_enc_obj) },
 };
+
+
 
 STATIC MP_DEFINE_CONST_DICT(protobuf_module_globals, protobuf_globals_table);
 const mp_obj_module_t protobuf_user_cmodule = {
