@@ -38,9 +38,9 @@ INC +=  -I$(TOP)
 INC += -I$(BUILD)
 
 # compiler settings
-CWARN = -Wall -Werror
+CWARN = -Wall
 CWARN += -Wpointer-arith -Wuninitialized
-CFLAGS += $(INC) $(CWARN) -std=gnu99 -DUNIX $(CFLAGS_MOD) $(COPT) -I$(VARIANT_DIR) $(CFLAGS_EXTRA)
+CFLAGS += $(INC) $(CWARN) -std=gnu99 -DUNIX $(CFLAGS_MOD) $(COPT) -I$(VARIANT_DIR) $(CFLAGS_EXTRA) -DMODULE_EXAMPLE_ENABLED=1
 
 # Debugging/Optimization
 ifdef DEBUG
