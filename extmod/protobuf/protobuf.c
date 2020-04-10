@@ -19,6 +19,8 @@
 
 #define WRITE_VALUE(X, structname, fieldname, value) X(structname, fieldname, value)
 
+const char err_msg[] = "wtf are you doing Alex";
+
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
@@ -27,9 +29,11 @@ int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
 
-STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {
+STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t msg_str) {
     int msg_id = get_msg_id(msg_str);
-    
+    if (msg_id == 0) {
+	mp_raise_msg(&mp_type_ValueError, err_msg);
+    }
     mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj);
     mp_map_elem_t *elem = NULL;
     size_t cur = 0;
@@ -37,7 +41,7 @@ STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {
     while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	int msg_field_id = get_msg_field_id(msg_id, elem->key);	
     }
-
+    
     return mp_obj_new_int(msg_id);
 }
 
@@ -203,14 +207,13 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 }
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
-STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(pb_enc_obj, pb_enc);
 
 STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
     { MP_ROM_QSTR(MP_QSTR_encode), MP_ROM_PTR(&protobuf_encode_obj) },
     { MP_ROM_QSTR(MP_QSTR_pb_enc), MP_ROM_PTR(&pb_enc_obj) },
 };
-
 
 
 STATIC MP_DEFINE_CONST_DICT(protobuf_module_globals, protobuf_globals_table);
