@@ -28,7 +28,7 @@ typedef enum {
 } msg_id_t;
 
 const char errmsg_invalid_msg[] = "Message name not found";
-const char errmsg_invalid_field[] = "Encountered an field for given message";
+const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
