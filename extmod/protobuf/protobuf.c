@@ -9,6 +9,7 @@
 
 
 #include <stdint.h>
+#include <stdlib.h>
 #include "py/obj.h"
 #include "py/stream.h"
 #include "pb_common.h"
@@ -20,7 +21,7 @@
 #define WRITE_VALUE(X, structname, fieldname, value) X(structname, fieldname, value)
 s2m_MDR_response response = s2m_MDR_response_init_default;
 void* fieldlist_arr[5] = {&response.module_id};
-
+STATIC mp_map_elem_t *dict_iter_nxt(mp_obj_dict_t *dict, size_t *cur);
 
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count) {
     int errcode;    
@@ -36,9 +37,28 @@ pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream) {
     return pb_stream;
 }
 
-STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {
-    uint8_t c[]={0x41, 0x42, 0x43};
-    uint8_t f[] = {0x44, 0x45, 0x46};    
+STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {    
+    /* HOW TO ACTUALLY READ A DICTIONARY, WORK IN PROGRESS */    
+    mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj);
+    mp_map_elem_t *elem = NULL;
+    size_t cur = 0;
+    elem = dict_iter_nxt(self, &cur);
+
+    char test[] = "MDR_res_length";    
+    char *msg_buf;
+    msg_buf = mp_obj_str_get_str(elem->key);
+    printf("elem key:%s\n", msg_buf);
+    
+    if (strcmp(test, msg_buf) == 0) {
+	return mp_obj_new_int(1);
+    }
+    else {
+	return mp_obj_new_int(0);
+    }
+    return elem->key;
+    
+    /* DICT READ END ========================================*/
+
     
     mp_get_stream_raise(stream, MP_STREAM_OP_WRITE);
     /* uint32_t* arr[1] = {&response.module_id}; */
@@ -64,19 +84,19 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
     
     /* WORKING STREAM WRITE TEST */
     /* uint8_t buf[]={0x41, 0x42, 0x43}; */
-    const char *buf;
-    size_t t = 4;
+    /* const char *buf; */
+    /* size_t t = 4; */
     /* buf = mp_obj_str_get_str(msg_str); */
-    const char k[] = "TEST";
-    buf = mp_obj_str_get_str(msg_str); // just use this func
-    if (strcmp(buf, k) == 0){ // this works when string is null terminated
-	printf("YES\n");
-    }
-    int errcode;
-    mp_uint_t size = 8;
-    printf("%s\n", buf);
-    mp_stream_rw(stream, (void*)buf, size, &errcode, MP_STREAM_RW_WRITE);
-    return stream;
+    /* const char k[] = "TEST"; */
+    /* buf = mp_obj_str_get_str(msg_str); // just use this func */
+    /* if (strcmp(buf, k) == 0){ // this works when string is null terminated */
+    /* 	printf("YES\n"); */
+    /* } */
+    /* int errcode; */
+    /* mp_uint_t size = 8; */
+    /* printf("%s\n", buf); */
+    /* mp_stream_rw(stream, (void*)buf, size, &errcode, MP_STREAM_RW_WRITE); */
+    /* return stream; */
     /* } */
     /* OLDER SHIT */
     /* return mp_obj_new_int(errcode); */
@@ -97,7 +117,7 @@ int get_msg_id(mp_obj_t msg)
     
     const char *msg_buf;
     msg_buf = mp_obj_str_get_str(msg);
-    printf("%s\n", msg_buf);
+
     if (strcmp(msg_buf, m2sMDR_req) == 0)
 	id = 1;
     else if (strcmp(msg_buf, s2mMDR_req_ACK) == 0)
@@ -110,10 +130,24 @@ int get_msg_id(mp_obj_t msg)
 }
 
 STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str) {
-    int msg_id = get_msg_id(msg_str);
-    
-    return mp_obj_new_int(get_msg_id(msg_str));
+    int msg_id = get_msg_id(msg_str);   
+    return mp_obj_new_int(msg_id);
 }
+
+STATIC mp_map_elem_t *dict_iter_nxt(mp_obj_dict_t *dict, size_t *cur) {
+    size_t max = dict->map.alloc;
+    mp_map_t *map = &dict->map;
+
+    for (size_t i = *cur; i < max; i++) {
+        if (mp_map_slot_is_filled(map, i)) {
+            *cur = i + 1;
+            return &(map->table[i]);
+        }
+    }
+
+    return NULL;
+}
+
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
