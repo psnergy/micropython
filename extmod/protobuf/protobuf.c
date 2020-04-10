@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include "py/obj.h"
 #include "py/stream.h"
+#include "py/runtime.h"
 #include "pb_common.h"
 #include "pb_encode.h"
 #include "handshake.pb.h"
@@ -19,7 +20,16 @@
 
 #define WRITE_VALUE(X, structname, fieldname, value) X(structname, fieldname, value)
 
-const char err_msg[] = "wtf are you doing Alex";
+typedef enum {
+    M2S_MDR_REQUEST = 1,
+    S2M_MDR_REQ_ACK = 2,
+    M2S_MDR_RES_CTS = 3,
+    S2M_MDR_RESPONSE = 4
+} msg_id_t;
+
+const char errmsg_invalid_msg[] = "Message name not found";
+const char errmsg_invalid_field[] = "Encountered an field for given message";
+const char errmsg_encode_error[] = "Protobuf encoding error";
 
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
@@ -29,17 +39,38 @@ int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
 
-STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t msg_str) {
+STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
     int msg_id = get_msg_id(msg_str);
     if (msg_id == 0) {
-	mp_raise_msg(&mp_type_ValueError, err_msg);
+	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
     }
-    mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj);
+    
+    mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
     mp_map_elem_t *elem = NULL;
     size_t cur = 0;
     
-    while ((elem = dict_iter_next(self, &cur)) != NULL) {
-	int msg_field_id = get_msg_field_id(msg_id, elem->key);	
+    switch (msg_id) {
+    case S2M_MDR_REQ_ACK:
+	__asm__("nop");
+	s2m_MDR_req_ACK ack_message = s2m_MDR_req_ACK_init_default;
+	
+	while ((elem = dict_iter_next(self, &cur)) != NULL) {
+	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
+	    if (msg_field_id != 1) {
+		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
+	    }
+	    
+	    int MDR_len = elem->value;
+	    ack_message.MDR_res_length = MDR_len;
+	    pb_ostream_t output = pb_ostream_from_mp_stream(stream);
+
+	    if (!pb_encode(&output, s2m_MDR_req_ACK_fields, &ack_message)) {
+		mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	    }
+
+	    return stream;
+	}
+	break;
     }
     
     return mp_obj_new_int(msg_id);
@@ -72,13 +103,13 @@ int get_msg_id(mp_obj_t msg)
     msg_buf = mp_obj_str_get_str(msg);
 
     if (strcmp(msg_buf, m2sMDR_req) == 0)
-	id = 1;
+	id = M2S_MDR_REQUEST;
     else if (strcmp(msg_buf, s2mMDR_req_ACK) == 0)
-	id = 2;
+	id = S2M_MDR_REQ_ACK;
     else if (strcmp(msg_buf, m2sMDR_res_CTS) == 0)
-	id = 3;
+	id = M2S_MDR_RES_CTS;
     else if (strcmp(msg_buf, s2mMDR_response) == 0)
-	id = 4;
+	id = S2M_MDR_RESPONSE;
     return id;
 }
 
@@ -99,13 +130,13 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
     const char *msg_buf;
     msg_buf = mp_obj_str_get_str(msg_field);
     switch (msg_id) {
-    case 2:
+    case S2M_MDR_REQ_ACK:
     {
 	if (strcmp(msg2_MDR_res_length, msg_buf) == 0)
 	    id = 1;
 	break;
     }
-    case 4:
+    case S2M_MDR_RESPONSE:
 	if (strcmp(msg4_MDR_version, msg_buf) == 0)
 	    id = 1;
 	else if (strcmp(msg4_module_id, msg_buf) == 0)
@@ -138,24 +169,24 @@ STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur) {
 
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 {
-    /* HOW TO ACTUALLY READ A DICTIONARY, WORK IN PROGRESS */    
-    mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj);
-    mp_map_elem_t *elem = NULL;
-    size_t cur = 0;
-    elem = dict_iter_next(self, &cur);
+    /* HOW TO ACTUALLY READ A DICTIONARY */
+    /* mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj); */
+    /* mp_map_elem_t *elem = NULL; */
+    /* size_t cur = 0; */
+    /* elem = dict_iter_next(self, &cur); */
 
-    char test[] = "MDR_res_length";    
-    const char *msg_buf;
-    msg_buf = mp_obj_str_get_str(elem->key);
-    printf("elem key:%s\n", msg_buf);
+    /* char test[] = "MDR_res_length";     */
+    /* const char *msg_buf; */
+    /* msg_buf = mp_obj_str_get_str(elem->key); */
+    /* printf("elem key:%s\n", msg_buf); */
     
-    if (strcmp(test, msg_buf) == 0) {
-	return mp_obj_new_int(1);
-    }
-    else {
-	return mp_obj_new_int(0);
-    }
-    return elem->key;
+    /* if (strcmp(test, msg_buf) == 0) { */
+    /* 	return mp_obj_new_int(1); */
+    /* } */
+    /* else { */
+    /* 	return mp_obj_new_int(0); */
+    /* } */
+    /* return elem->key; */
     
     /* DICT READ END ========================================*/
 
@@ -163,8 +194,11 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
     mp_get_stream_raise(stream, MP_STREAM_OP_WRITE);
     /* uint32_t* arr[1] = {&response.module_id}; */
     /* *arr[0] = 2; */
-    /* pb_ostream_t output = pb_ostream_from_mp_stream(stream); */
-    
+    pb_ostream_t output = pb_ostream_from_mp_stream(stream);
+    s2m_MDR_response msg = s2m_MDR_response_init_default;
+    msg.module_id = 19;
+    pb_encode(&output, s2m_MDR_response_fields, &msg);
+    return stream;
     /* mp_map_t map = *mp_obj_dict_get_map(obj); */
     /* if(mp_map_slot_is_filled(&map, 1)) { */
 /* #define write(structname, fieldname, value) structname.fieldname=value */
@@ -207,7 +241,7 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 }
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
-STATIC MP_DEFINE_CONST_FUN_OBJ_2(pb_enc_obj, pb_enc);
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
 
 STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
