@@ -132,25 +132,6 @@ STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur) {
     return NULL;
 }
 
-
-STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
-STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
-
-STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
-    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
-    { MP_ROM_QSTR(MP_QSTR_encode), MP_ROM_PTR(&protobuf_encode_obj) },
-    { MP_ROM_QSTR(MP_QSTR_pb_enc), MP_ROM_PTR(&pb_enc_obj) },
-};
-
-
-
-STATIC MP_DEFINE_CONST_DICT(protobuf_module_globals, protobuf_globals_table);
-const mp_obj_module_t protobuf_user_cmodule = {
-    .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&protobuf_module_globals,
-};
-MP_REGISTER_MODULE(MP_QSTR_protobuf, protobuf_user_cmodule, MODULE_EXAMPLE_ENABLED);
-
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 {
     /* HOW TO ACTUALLY READ A DICTIONARY, WORK IN PROGRESS */    
@@ -220,3 +201,21 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
     /* pb_ostream_t pb_stream = pb_ostream_from_buffer(buffer, sizeof(buffer)); */
     
 }
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
+
+STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
+    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
+    { MP_ROM_QSTR(MP_QSTR_encode), MP_ROM_PTR(&protobuf_encode_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pb_enc), MP_ROM_PTR(&pb_enc_obj) },
+};
+
+
+
+STATIC MP_DEFINE_CONST_DICT(protobuf_module_globals, protobuf_globals_table);
+const mp_obj_module_t protobuf_user_cmodule = {
+    .base = { &mp_type_module },
+    .globals = (mp_obj_dict_t*)&protobuf_module_globals,
+};
+MP_REGISTER_MODULE(MP_QSTR_protobuf, protobuf_user_cmodule, MODULE_EXAMPLE_ENABLED);
