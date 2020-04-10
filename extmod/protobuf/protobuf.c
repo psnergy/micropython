@@ -31,6 +31,9 @@ const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 
+_subscriptions subs[10];
+int subs_idx = 0;
+
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
@@ -59,8 +62,9 @@ STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
 	    if (msg_field_id != 1) {
 		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
 	    }
-	    
-	    int MDR_len = elem->value;
+
+	    /* this works on x64 unix, not sure on cortex-m arm */
+	    int MDR_len = elem->value; 
 	    ack_message.MDR_res_length = MDR_len;
 	    pb_ostream_t output = pb_ostream_from_mp_stream(stream);
 
@@ -71,6 +75,29 @@ STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
 	    return stream;
 	}
 	break;
+    case S2M_MDR_RESPONSE:
+	__asm__("nop");
+	s2m_MDR_response MDR_response = s2m_MDR_response_init_zero;
+
+	while ((elem = dict_iter_next(self, &cur)) != NULL) {
+	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
+	    switch (msg_field_id) {
+	    case 1:
+		MDR_response.MDR_version = mp_obj_float_get(elem->value);
+		break;
+	    case 2:
+		MDR_response.module_id = elem->value;
+		break;
+	    case 3:
+		MDR_response.module_class = elem->value;
+		break;
+	    case 4:
+		MDR_response.entity_id = elem->value;
+		break;
+	    case 5:
+		break;
+	    }
+	}
     }
     
     return mp_obj_new_int(msg_id);
