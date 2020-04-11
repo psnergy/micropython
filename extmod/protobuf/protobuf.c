@@ -19,6 +19,7 @@
 #include "pb.h"
 
 #define WRITE_VALUE(X, structname, fieldname, value) X(structname, fieldname, value)
+/* #define DEBUG_PRINT */
 
 typedef enum {
     M2S_MDR_REQUEST = 1,
@@ -134,11 +135,13 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 		break;
 	    }
 	}
+	
+#ifdef DEBUG_PRINT
 	printf("MDR_version: %f\n", MDR_response.MDR_version);
 	printf("module id: %d\n", MDR_response.module_id);
 	printf("entity id: %d\n", MDR_response.entity_id);
 	printf("module class: %d\n", MDR_response.module_class);
-	
+#endif	
 	pb_ostream_t output = pb_ostream_from_mp_stream(stream);
 	MDR_response.subscriptions.funcs.encode=encode_subscription_callback;
 	if(!pb_encode(&output, s2m_MDR_response_fields, &MDR_response)){
@@ -172,12 +175,16 @@ bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field
 	    if (subs[x].has_module_id) {
 		loc_subs.has_module_id = true;
 		loc_subs.module_id = subs[x].module_id;
+#ifdef DEBUG_PRINT
 		printf("loc_subs module id: %d\n", subs[x].module_id);
+#endif
 	    }
 	    if (subs[x].has_i2c_address) {
 		loc_subs.has_i2c_address = true;
 		loc_subs.i2c_address = subs[x].i2c_address;
+#ifdef DEBUG_PRINT
 		printf("loc_subs i2c_addr: %d\n", subs[x].i2c_address);
+#endif
 	    }
 	    if (subs[x].has_entity_id) {
 		loc_subs.has_entity_id = true;
@@ -187,11 +194,15 @@ bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field
 	    loc_subs.has_module_class=false;	    
 
 	    if(!pb_encode_tag_for_field(ostream, field)){
+#ifdef DEBUG_PRINT
 		printf("Encode ERR1\n");
+#endif
 		return false;
 	    }
 	    if(!pb_encode_submessage(ostream, _subscriptions_fields, &loc_subs)){
+#ifdef DEBUG_PRINT
 		printf("Encode ERR2\n");
+#endif
 		return false;
 	    }
 	}
