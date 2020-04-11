@@ -82,10 +82,6 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
     case S2M_MDR_RESPONSE:
 	__asm__("nop");
 	s2m_MDR_response MDR_response = s2m_MDR_response_init_zero;
-
-	for (int i=0; i<32; i++) {
-	    subs[i] = (_subscriptions)_subscriptions_init_default;
-	}
 	
 	while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
@@ -176,9 +172,9 @@ bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field
 		printf("loc_subs module id: %d\n", subs[x].module_id);
 	    }
 	    if (subs[x].has_i2c_address) {
-		printf("here2\n");
 		loc_subs.has_i2c_address = true;
 		loc_subs.i2c_address = subs[x].i2c_address;
+		printf("loc_subs i2c_addr: %d\n", subs[x].i2c_address);
 	    }
 	    if (subs[x].has_entity_id) {
 		loc_subs.has_entity_id = true;
