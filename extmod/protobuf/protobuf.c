@@ -31,7 +31,7 @@ const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 
-_subscriptions subs[32] = {_subscriptions_init_zero};
+_subscriptions subs[32];
 int subs_idx = 0, subs_idx_max = 0;
 
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
@@ -82,6 +82,10 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
     case S2M_MDR_RESPONSE:
 	__asm__("nop");
 	s2m_MDR_response MDR_response = s2m_MDR_response_init_zero;
+
+	for (int i=0; i<32; i++) {
+	    subs[i] = (_subscriptions)_subscriptions_init_default;
+	}
 	
 	while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
@@ -165,7 +169,7 @@ bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field
 {
     if(ostream!=NULL && field->tag == s2m_MDR_response_subscriptions_tag) {
 	for (int x=0; x<subs_idx_max; x++) {
-	    _subscriptions loc_subs;
+	    _subscriptions loc_subs = _subscriptions_init_zero;
 	    if (subs[x].has_module_id) {
 		loc_subs.has_module_id = true;
 		loc_subs.module_id = subs[x].module_id;
