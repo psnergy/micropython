@@ -81,7 +81,7 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	break;
     case S2M_MDR_RESPONSE:
 	__asm__("nop");
-	s2m_MDR_response MDR_response = s2m_MDR_response_init_zero;
+	s2m_MDR_response MDR_response = s2m_MDR_response_init_default;
 	
 	while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
@@ -91,20 +91,19 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 		MDR_response.MDR_version = mp_obj_float_get(elem->value);
 		break;
 	    case 2:
-		MDR_response.module_id = in;
+		MDR_response.module_id = (in-1)/2;
 		break;
 	    case 3:
-		MDR_response.module_class = in;
+		MDR_response.module_class = (in-1)/2;
 		break;
 	    case 4:
-		MDR_response.entity_id = in;
+		MDR_response.entity_id = (in-1)/2;
 		break;
 	    case 5: /* subs_module_ids */
 		for (int x=1; x<32; x++) {
 		    if (in&1<<x) {
 			subs[subs_idx].module_id = x-1;
 			subs[subs_idx++].has_module_id = true;
-			printf("Got module id: %d\n", x-1);
 		    }
 		}
 		if (subs_idx > subs_idx_max)
@@ -135,7 +134,11 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 		break;
 	    }
 	}
-	printf("max_subs_idx: %d\n", subs_idx_max);
+	printf("MDR_version: %f\n", MDR_response.MDR_version);
+	printf("module id: %d\n", MDR_response.module_id);
+	printf("entity id: %d\n", MDR_response.entity_id);
+	printf("module class: %d\n", MDR_response.module_class);
+	
 	pb_ostream_t output = pb_ostream_from_mp_stream(stream);
 	MDR_response.subscriptions.funcs.encode=encode_subscription_callback;
 	if(!pb_encode(&output, s2m_MDR_response_fields, &MDR_response)){
