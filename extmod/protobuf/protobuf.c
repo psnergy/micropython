@@ -31,7 +31,7 @@ const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 
-_subscriptions subs[32] = s2m_MDR_response_init_zero;
+_subscriptions subs[32] = {_subscriptions_init_zero};
 int subs_idx = 0, subs_idx_max = 0;
 
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
@@ -43,7 +43,7 @@ int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
 
-STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
+STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
     int msg_id = get_msg_id(msg_str);
     if (msg_id == 0) {
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
@@ -281,7 +281,7 @@ STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur) {
     return NULL;
 }
 
-STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
+STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 {
     /* HOW TO ACTUALLY READ A DICTIONARY */
     /* mp_obj_dict_t *self = MP_OBJ_TO_PTR(obj); */
