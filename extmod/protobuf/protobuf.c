@@ -31,13 +31,14 @@ const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 
-_subscriptions subs[10];
-int subs_idx = 0;
+_subscriptions subs[32] = s2m_MDR_response_init_zero;
+int subs_idx = 0, subs_idx_max = 0;
 
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count);
+bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
@@ -57,7 +58,7 @@ STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
 	__asm__("nop");
 	s2m_MDR_req_ACK ack_message = s2m_MDR_req_ACK_init_default;
 	
-	while ((elem = dict_iter_next(self, &cur)) != NULL) {
+	if ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
 	    if (msg_field_id != 1) {
 		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
@@ -74,30 +75,73 @@ STATIC mp_obj_t pb_enc(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream) {
 
 	    return stream;
 	}
+	else {
+	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	}
 	break;
     case S2M_MDR_RESPONSE:
 	__asm__("nop");
 	s2m_MDR_response MDR_response = s2m_MDR_response_init_zero;
-
+	
 	while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
+	    uint32_t in = elem->value;
 	    switch (msg_field_id) {
 	    case 1:
 		MDR_response.MDR_version = mp_obj_float_get(elem->value);
 		break;
 	    case 2:
-		MDR_response.module_id = elem->value;
+		MDR_response.module_id = in;
 		break;
 	    case 3:
-		MDR_response.module_class = elem->value;
+		MDR_response.module_class = in;
 		break;
 	    case 4:
-		MDR_response.entity_id = elem->value;
+		MDR_response.entity_id = in;
 		break;
-	    case 5:
+	    case 5: /* subs_module_ids */
+		for (int x=1; x<32; x++) {
+		    if (in&1<<x) {
+			subs[subs_idx].module_id = x-1;
+			subs[subs_idx++].has_module_id = true;
+			printf("Got module id: %d\n", x-1);
+		    }
+		}
+		if (subs_idx > subs_idx_max)
+		    subs_idx_max = subs_idx;
+		subs_idx = 0;
+		break;
+	    case 6: /* subs_entity_ids */
+		for (int x=1; x<32; x++) {
+		    if (in&(1<<x)) {
+			subs[subs_idx].entity_id = x-1;
+			subs[subs_idx++].has_entity_id = true;
+		    }
+		}
+		if (subs_idx > subs_idx_max)
+		    subs_idx_max = subs_idx;
+		subs_idx = 0;
+		break;
+	    case 7:
+		for (int x=1; x<32; x++) {
+		    if (in&(1<<x)) {
+			subs[subs_idx].i2c_address = x-1;
+			subs[subs_idx++].has_i2c_address = true;
+		    }
+		}
+		if (subs_idx > subs_idx_max)
+		    subs_idx_max = subs_idx;
+		subs_idx = 0;
 		break;
 	    }
 	}
+	printf("max_subs_idx: %d\n", subs_idx_max);
+	pb_ostream_t output = pb_ostream_from_mp_stream(stream);
+	MDR_response.subscriptions.funcs.encode=encode_subscription_callback;
+	if(!pb_encode(&output, s2m_MDR_response_fields, &MDR_response)){
+	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	}
+	return stream;
     }
     
     return mp_obj_new_int(msg_id);
@@ -115,6 +159,44 @@ static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t coun
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream) {
     pb_ostream_t pb_stream = {&write_callback, (void*)stream, 100, 0};
     return pb_stream;
+}
+
+bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg)
+{
+    if(ostream!=NULL && field->tag == s2m_MDR_response_subscriptions_tag) {
+	for (int x=0; x<subs_idx_max; x++) {
+	    _subscriptions loc_subs;
+	    if (subs[x].has_module_id) {
+		loc_subs.has_module_id = true;
+		loc_subs.module_id = subs[x].module_id;
+		printf("loc_subs module id: %d\n", subs[x].module_id);
+	    }
+	    if (subs[x].has_i2c_address) {
+		printf("here2\n");
+		loc_subs.has_i2c_address = true;
+		loc_subs.i2c_address = subs[x].i2c_address;
+	    }
+	    if (subs[x].has_entity_id) {
+		loc_subs.has_entity_id = true;
+		loc_subs.entity_id = subs[x].entity_id;
+	    }
+	    /* Module class not supported yet */
+	    loc_subs.has_module_class=false;	    
+
+	    if(!pb_encode_tag_for_field(ostream, field)){
+		printf("Encode ERR1\n");
+		return false;
+	    }
+	    if(!pb_encode_submessage(ostream, _subscriptions_fields, &loc_subs)){
+		printf("Encode ERR2\n");
+		return false;
+	    }
+	}
+    }
+    else{
+	return false;
+    }
+    return true;
 }
 
 int get_msg_id(mp_obj_t msg)
@@ -149,8 +231,9 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	msg4_module_id[] = "module_id",
 	msg4_module_class[] = "module_class",
 	msg4_entity_id[] = "entity_id",
-	msg4_subscriptions[] = "subscriptions",
-	msg_sub_i2c_address[] = "i2c_address";
+	msg4_subs_module_ids[] = "subs_module_ids",
+	msg4_subs_entity_ids[] = "subs_entity_ids",
+    	msg4_subs_i2c_addrs[] = "subs_i2c_addrs";
 
     int id = 0;
 
@@ -172,8 +255,12 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	    id = 3;
 	else if (strcmp(msg4_entity_id, msg_buf) == 0)
 	    id = 4;
-	else if (strcmp(msg4_subscriptions, msg_buf) == 0)
+	else if (strcmp(msg4_subs_module_ids, msg_buf) == 0)
 	    id = 5;
+	else if (strcmp(msg4_subs_entity_ids, msg_buf) == 0)
+	    id = 6;
+	else if (strcmp(msg4_subs_i2c_addrs, msg_buf) == 0)
+	    id = 7;
 	break;
     }
     
