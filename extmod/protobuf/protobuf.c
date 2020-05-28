@@ -383,4 +383,4 @@ const mp_obj_module_t protobuf_user_cmodule = {
     .base = { &mp_type_module },
     .globals = (mp_obj_dict_t*)&protobuf_module_globals,
 };
-MP_REGISTER_MODULE(MP_QSTR_protobuf, protobuf_user_cmodule, MODULE_EXAMPLE_ENABLED);
+MP_REGISTER_MODULE(MP_QSTR_protobuf, protobuf_user_cmodule, MODULE_PROTOBUF_ENABLED);
