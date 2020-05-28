@@ -9,7 +9,7 @@ include $(TOP)/py/py.mk
 ARCH = $(shell uname -m)
 ifneq ("$(ARCH)", "ppc64")
 ifneq ("$(ARCH)", "ppc64le")
-	CROSS_COMPILE ?= powerpc64le-linux-
+	CROSS_COMPILE ?= powerpc64le-linux-gnu-
 endif
 endif
 
@@ -17,7 +17,7 @@ INC += -I.
 INC += -I$(TOP)
 INC += -I$(BUILD)
 
-CFLAGS = $(INC) -g -Wall -std=c99 $(COPT)
+CFLAGS = $(INC) -g -Wall -Wdouble-promotion -Wfloat-conversion -std=c99 $(COPT)
 CFLAGS += -mno-string -mno-multiple -mno-vsx -mno-altivec -nostdlib
 CFLAGS += -mlittle-endian -mstrict-align -msoft-float
 CFLAGS += -Os
@@ -52,7 +52,7 @@ $(BUILD)/_frozen_mpy.c: frozentest.mpy $(BUILD)/genhdr/qstrdefs.generated.h
 
 $(BUILD)/firmware.elf: $(OBJ) powerpc.lds
 	$(ECHO) "LINK $@"
-	$(Q)$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(Q)$(LD) $(LDFLAGS) -o $@ $(OBJ) $(LIBS)
 	$(Q)$(SIZE) $@
 
 $(BUILD)/firmware.bin: $(BUILD)/firmware.elf

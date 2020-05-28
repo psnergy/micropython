@@ -132,10 +132,10 @@
     defined(STM32F407xx) || defined(STM32F417xx) || \
     defined(STM32F401xC) || defined(STM32F401xE)
 #define VBAT_DIV (2)
-#elif defined(STM32F411xE) || defined(STM32F413xx) || \
-    defined(STM32F427xx) || defined(STM32F429xx) || \
-    defined(STM32F437xx) || defined(STM32F439xx) || \
-    defined(STM32F446xx)
+#elif defined(STM32F411xE) || defined(STM32F412Zx) || \
+    defined(STM32F413xx) || defined(STM32F427xx) || \
+    defined(STM32F429xx) || defined(STM32F437xx) || \
+    defined(STM32F439xx) || defined(STM32F446xx)
 #define VBAT_DIV (4)
 #elif defined(STM32F722xx) || defined(STM32F723xx) || \
     defined(STM32F732xx) || defined(STM32F733xx) || \
@@ -763,7 +763,7 @@ STATIC volatile float adc_refcor = 1.0f;
 
 float adc_read_core_temp_float(ADC_HandleTypeDef *adcHandle) {
     int32_t raw_value = adc_config_and_read_ref(adcHandle, ADC_CHANNEL_TEMPSENSOR);
-    float core_temp_avg_slope = (*ADC_CAL2 - *ADC_CAL1) / 80.0;
+    float core_temp_avg_slope = (*ADC_CAL2 - *ADC_CAL1) / 80.0f;
     return (((float)raw_value * adc_refcor - *ADC_CAL1) / core_temp_avg_slope) + 30.0f;
 }
 
