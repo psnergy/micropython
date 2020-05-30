@@ -30,6 +30,8 @@
 // Variant-specific definitions.
 #include "mpconfigvariant.h"
 
+#define MODULE_PROTOBUF_ENABLED (1)
+
 // The minimal variant's config covers everything.
 // If we're building the minimal variant, ignore the rest of this file.
 #ifndef MICROPY_UNIX_MINIMAL

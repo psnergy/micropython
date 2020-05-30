@@ -15,22 +15,19 @@
 #include "py/runtime.h"
 #include "pb_common.h"
 #include "pb_encode.h"
+#include "pb_decode.h"
 #include "handshake.pb.h"
+#include "data.pb.h"
+#include "protobuf.h"
 #include "pb.h"
 
 #define WRITE_VALUE(X, structname, fieldname, value) X(structname, fieldname, value)
 /* #define DEBUG_PRINT */
 
-typedef enum {
-    M2S_MDR_REQUEST = 1,
-    S2M_MDR_REQ_ACK = 2,
-    M2S_MDR_RES_CTS = 3,
-    S2M_MDR_RESPONSE = 4
-} msg_id_t;
-
 const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
+const char errmsg_decode_error[] = "Protobuf decoding error";
 
 _subscriptions subs[32];
 int subs_idx = 0, subs_idx_max = 0;
@@ -38,6 +35,7 @@ int subs_idx = 0, subs_idx_max = 0;
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
+pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream);
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count);
 bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 int get_msg_id(mp_obj_t msg);
@@ -153,6 +151,34 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
     return mp_obj_new_int(msg_id);
 }
 
+STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
+    mp_obj_t dict = mp_obj_new_dict(0);
+
+    int msg_id = get_msg_id(msg_str);
+    if (msg_id == 0) {
+	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
+    }
+
+    switch (msg_id) {
+    case M2S_SOR:
+	__asm__("nop");
+	char sor_code_key[] = "SOR_code";
+	pb_istream_t istream = pb_istream_from_mp_stream(stream);
+	m2s_SOR sor_message = m2s_SOR_init_zero;
+	pb_decode(&istream, m2s_SOR_fields, &sor_message);
+	/* if (!pb_decode(&istream, m2s_SOR_fields, &sor_message)) { */
+	/*     mp_raise_msg(&mp_type_ValueError, errmsg_decode_error); */
+	/* } */
+	mp_obj_t sor_code = mp_obj_new_int(sor_message.SOR_code);
+	mp_obj_t sor_key  = mp_obj_new_str(sor_code_key, sizeof(sor_code_key)-1);
+	dict = mp_obj_dict_store(dict, sor_key, sor_code);
+	break;
+    default:
+	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
+    }
+    return dict;
+}
+
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count) {
     int errcode;    
     mp_stream_rw(stream->state, (void*)buf, (mp_uint_t) count, &errcode, MP_STREAM_RW_WRITE);
@@ -162,8 +188,22 @@ static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t coun
     return true;
 }
 
+static bool read_callback(pb_istream_t *stream, const uint8_t *buf, size_t count) {
+    int errcode;    
+    mp_stream_rw(stream->state, (void*)buf, (mp_uint_t) count, &errcode, MP_STREAM_RW_READ);
+    if (errcode > 0) {
+	return false;
+    }
+    return true;
+}
+
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream) {
     pb_ostream_t pb_stream = {&write_callback, (void*)stream, 100, 0};
+    return pb_stream;
+}
+
+pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream) {
+    pb_istream_t pb_stream = {&read_callback, (void*)stream, 100};
     return pb_stream;
 }
 
@@ -218,7 +258,8 @@ int get_msg_id(mp_obj_t msg)
     const char m2sMDR_req[] = "m2s_MDR_request",
 	s2mMDR_req_ACK[] = "s2m_MDR_req_ACK",
 	m2sMDR_res_CTS[] = "m2s_MDR_res_CTS",
-	s2mMDR_response[] = "s2m_MDR_response";
+	s2mMDR_response[] = "s2m_MDR_response",
+	m2sSOR[] = "m2s_SOR";
     
     int id = 0; /* Default case is no matching ID */
     
@@ -233,6 +274,8 @@ int get_msg_id(mp_obj_t msg)
 	id = M2S_MDR_RES_CTS;
     else if (strcmp(msg_buf, s2mMDR_response) == 0)
 	id = S2M_MDR_RESPONSE;
+    else if (strcmp(msg_buf, m2sSOR) == 0)
+	id = M2S_SOR;
     return id;
 }
 
@@ -369,11 +412,14 @@ STATIC mp_obj_t pb_enc(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str)
 }
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(protobuf_encode_obj, protobuf_encode);
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(protobuf_decode_obj, protobuf_decode);
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(pb_enc_obj, pb_enc);
+
 
 STATIC const mp_rom_map_elem_t protobuf_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_protobuf) },
     { MP_ROM_QSTR(MP_QSTR_encode), MP_ROM_PTR(&protobuf_encode_obj) },
+    { MP_ROM_QSTR(MP_QSTR_decode), MP_ROM_PTR(&protobuf_decode_obj) },
     { MP_ROM_QSTR(MP_QSTR_pb_enc), MP_ROM_PTR(&pb_enc_obj) },
 };
 
