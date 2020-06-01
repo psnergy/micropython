@@ -13,6 +13,7 @@
 #include "py/obj.h"
 #include "py/stream.h"
 #include "py/runtime.h"
+#include "py/objlist.h"
 #include "pb_common.h"
 #include "pb_encode.h"
 #include "pb_decode.h"
@@ -31,13 +32,15 @@ const char errmsg_decode_error[] = "Protobuf decoding error";
 
 _subscriptions subs[32];
 int subs_idx = 0, subs_idx_max = 0;
-
+int num_datapoints = 0;               /*< This global helps the data encoding callback */
+_datapoint datapoints[16];    
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
 pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream);
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count);
 bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
+bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
@@ -48,13 +51,13 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
     }
     
-    mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
-    mp_map_elem_t *elem = NULL;
-    size_t cur = 0;
-    
     switch (msg_id) {
     case S2M_MDR_REQ_ACK:
+    {
 	__asm__("nop");
+	mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
+	mp_map_elem_t *elem = NULL;
+	size_t cur = 0;
 	s2m_MDR_req_ACK ack_message = s2m_MDR_req_ACK_init_default;
 	
 	if ((elem = dict_iter_next(self, &cur)) != NULL) {
@@ -63,8 +66,7 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
 	    }
 
-	    /* this works on x64 unix, not sure on cortex-m arm */
-	    int MDR_len = elem->value; 
+	    int MDR_len = mp_obj_get_int(elem->value); 
 	    ack_message.MDR_res_length = MDR_len;
 	    pb_ostream_t output = pb_ostream_from_mp_stream(stream);
 
@@ -78,13 +80,20 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
 	}
 	break;
+    }
     case S2M_MDR_RESPONSE:
-	__asm__("nop");
+    {
+	__asm__("nop");	    
+	mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
+	mp_map_elem_t *elem = NULL;
+	size_t cur = 0;
+
 	s2m_MDR_response MDR_response = s2m_MDR_response_init_default;
 	
 	while ((elem = dict_iter_next(self, &cur)) != NULL) {
 	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
-	    uint32_t in = elem->value;
+
+	    uint32_t in = elem->value; /*< TODO change this to the proper method and test */
 	    switch (msg_field_id) {
 	    case 1:
 		MDR_response.MDR_version = mp_obj_float_get(elem->value);
@@ -132,6 +141,7 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 		subs_idx = 0;
 		break;
 	    }
+	    
 	}
 	
 #ifdef DEBUG_PRINT
@@ -146,6 +156,50 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
 	}
 	return stream;
+    }
+    case S2M_DATA:
+    {	
+	mp_obj_list_t *list = MP_OBJ_TO_PTR(dict);
+	/* _datapoint datapoints[16]; /\*< Limit to 16 datapoints for now *\/ */
+	printf("len: %ld\n", list->len);
+	num_datapoints = list->len;
+	for (int x=0; x < list->len; x++) {
+	    mp_obj_dict_t *nested_dict = MP_OBJ_TO_PTR(list->items[x]);
+	    mp_map_elem_t *elem = NULL;
+	    size_t cur = 0;
+	    while ((elem = dict_iter_next(nested_dict, &cur)) != NULL) {
+		int msg_field_id = get_msg_field_id(msg_id, elem->key);
+		switch (msg_field_id) {
+		case 1:
+		    datapoints[x].entity_id = mp_obj_get_int(elem->value);
+		    break;
+		case 2:
+		    datapoints[x].data = mp_obj_get_float(elem->value);
+		    break;
+		case 3:
+		    datapoints[x].channel_id = mp_obj_get_int(elem->value);
+		    datapoints[x].has_channel_id = true;
+		    break;
+		case 4:
+		    datapoints[x].unit_id = mp_obj_get_int(elem->value);
+		    datapoints[x].has_unit_id = true;
+		    break;
+		default:
+		    mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
+		}
+	    }
+	}
+	s2m_data data_message = s2m_data_init_zero;
+	data_message.datapoints.funcs.encode=encode_datapoint_callback;
+	pb_ostream_t output = pb_ostream_from_mp_stream(stream);
+	if (!pb_encode(&output, s2m_data_fields, &data_message)){
+	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	}
+	return stream;
+    }
+	break;
+    default:
+	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);	
     }
     
     return mp_obj_new_int(msg_id);
@@ -171,7 +225,8 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	/* } */
 	mp_obj_t sor_code = mp_obj_new_int(sor_message.SOR_code);
 	mp_obj_t sor_key  = mp_obj_new_str(sor_code_key, sizeof(sor_code_key)-1);
-	dict = mp_obj_dict_store(dict, sor_key, sor_code);
+	mp_obj_t out_dict = mp_obj_dict_store(dict, sor_key, sor_code);
+	return out_dict;
 	break;
     default:
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
@@ -253,13 +308,42 @@ bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field
     return true;
 }
 
+bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *args)
+{
+    /* _datapoint *datapoints = *args; */
+    if (ostream != NULL && field->tag == s2m_data_datapoints_tag) {
+	for (int x=0; x < num_datapoints; x++) {
+	    printf("data: %f, entity: %d\n", datapoints[x].data, datapoints[x].entity_id);
+	    _datapoint datapoint = _datapoint_init_zero;
+	    datapoint.entity_id = datapoints[x].entity_id;
+	    datapoint.data      = datapoints[x].data;
+	    if (datapoints[x].has_unit_id) {
+		datapoint.unit_id = datapoints[x].unit_id;
+		datapoint.has_unit_id = true;
+	    }
+	    if (datapoints[x].has_channel_id) {
+		datapoint.channel_id = datapoints[x].channel_id;
+		datapoint.has_channel_id = true;
+	    }
+	    if (!pb_encode_tag_for_field(ostream, field))
+		return false;
+	    if (!pb_encode_submessage(ostream, _datapoint_fields, &datapoint))
+		return false;
+	}
+    }
+    else
+	return false;
+    return true;
+}
+
 int get_msg_id(mp_obj_t msg)
 {    
     const char m2sMDR_req[] = "m2s_MDR_request",
 	s2mMDR_req_ACK[] = "s2m_MDR_req_ACK",
 	m2sMDR_res_CTS[] = "m2s_MDR_res_CTS",
 	s2mMDR_response[] = "s2m_MDR_response",
-	m2sSOR[] = "m2s_SOR";
+	m2sSOR[] = "m2s_SOR",
+	s2m_data[] = "s2m_data";
     
     int id = 0; /* Default case is no matching ID */
     
@@ -276,6 +360,8 @@ int get_msg_id(mp_obj_t msg)
 	id = S2M_MDR_RESPONSE;
     else if (strcmp(msg_buf, m2sSOR) == 0)
 	id = M2S_SOR;
+    else if (strcmp(msg_buf, s2m_data) == 0)
+	id = S2M_DATA;
     return id;
 }
 
@@ -290,7 +376,11 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	msg4_entity_id[] = "entity_id",
 	msg4_subs_module_ids[] = "subs_module_ids",
 	msg4_subs_entity_ids[] = "subs_entity_ids",
-    	msg4_subs_i2c_addrs[] = "subs_i2c_addrs";
+    	msg4_subs_i2c_addrs[] = "subs_i2c_addrs",
+	msg7_entity_id[] = "entity_id",
+	msg7_data[] = "data",
+	msg7_unit_id[] = "unit_id",
+	msg7_channel_id[] = "channel_id";
 
     int id = 0;
 
@@ -318,6 +408,16 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	    id = 6;
 	else if (strcmp(msg4_subs_i2c_addrs, msg_buf) == 0)
 	    id = 7;
+	break;
+    case S2M_DATA:
+	if (strcmp(msg7_entity_id, msg_buf) == 0)
+	    id = 1;
+	if (strcmp(msg7_data, msg_buf) == 0)
+	    id = 2;
+	if (strcmp(msg7_channel_id, msg_buf) == 0)
+	    id = 3;
+	if (strcmp(msg7_unit_id, msg_buf) == 0)
+	    id = 4;
 	break;
     }
     
