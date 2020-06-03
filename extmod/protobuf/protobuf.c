@@ -161,7 +161,7 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
     {	
 	mp_obj_list_t *list = MP_OBJ_TO_PTR(dict);
 	/* _datapoint datapoints[16]; /\*< Limit to 16 datapoints for now *\/ */
-	printf("len: %ld\n", list->len);
+	/* printf("len: %ld\n", list->len); */
 	num_datapoints = list->len;
 	for (int x=0; x < list->len; x++) {
 	    mp_obj_dict_t *nested_dict = MP_OBJ_TO_PTR(list->items[x]);
@@ -313,7 +313,7 @@ bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, v
     /* _datapoint *datapoints = *args; */
     if (ostream != NULL && field->tag == s2m_data_datapoints_tag) {
 	for (int x=0; x < num_datapoints; x++) {
-	    printf("data: %f, entity: %d\n", datapoints[x].data, datapoints[x].entity_id);
+	    /* printf("data: %f, entity: %d\n", datapoints[x].data, datapoints[x].entity_id); */
 	    _datapoint datapoint = _datapoint_init_zero;
 	    datapoint.entity_id = datapoints[x].entity_id;
 	    datapoint.data      = datapoints[x].data;

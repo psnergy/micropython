@@ -31,6 +31,8 @@
 #include "mpconfigboard.h"
 #include "mpconfigboard_common.h"
 
+#define MODULE_PROTOBUF_ENABLED (1)
+
 // memory allocation policies
 #ifndef MICROPY_GC_STACK_ENTRY_TYPE
 #if MICROPY_HW_SDRAM_SIZE
