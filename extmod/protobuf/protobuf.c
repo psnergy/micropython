@@ -1,7 +1,7 @@
 
-/* TODO make a callback and struct generator for pb_ostream_t that writes to micropython's stream.
+/* DONE make a callback and struct generator for pb_ostream_t that writes to micropython's stream.
  *     Details in common.h/c from nanopb client/server files
- * TODO work on reading kv pairs from a dict mp_obj_t. Details in py/objdict.c, py/obj.h
+ * DONE work on reading kv pairs from a dict mp_obj_t. Details in py/objdict.c, py/obj.h
  * 
  * NOTE building requires option USER_C_MODULES=../../extmod
  *
@@ -196,8 +196,36 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
 	}
 	return stream;
-    }
 	break;
+    }
+    case S2M_DOC:
+    {
+	__asm__("nop");
+	mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
+	mp_map_elem_t *elem = NULL;
+	size_t cur = 0;
+	s2m_DOC doc = s2m_DOC_init_zero;
+	while ((elem = dict_iter_next(self, &cur)) != NULL) {
+	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
+	    switch (msg_field_id) {
+	    case 1: /* DOC_code */
+		doc.DOC_code = mp_obj_get_int(elem->value);
+		break;
+	    case 2: /* tx_length */
+		doc.tx_length = mp_obj_get_int(elem->value);
+		break;
+	    default:
+		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
+		break;
+	    }
+	}
+	pb_ostream_t doc_ostream = pb_ostream_from_mp_stream(stream);
+	if (!pb_encode(&doc_ostream, s2m_DOC_fields, &doc)) {
+	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	}
+	return stream;
+	break;
+    }
     default:
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);	
     }
@@ -343,7 +371,8 @@ int get_msg_id(mp_obj_t msg)
 	m2sMDR_res_CTS[] = "m2s_MDR_res_CTS",
 	s2mMDR_response[] = "s2m_MDR_response",
 	m2sSOR[] = "m2s_SOR",
-	s2m_data[] = "s2m_data";
+	s2m_data[] = "s2m_data",
+	s2m_DOC[] = "s2m_DOC";
     
     int id = 0; /* Default case is no matching ID */
     
@@ -362,6 +391,8 @@ int get_msg_id(mp_obj_t msg)
 	id = M2S_SOR;
     else if (strcmp(msg_buf, s2m_data) == 0)
 	id = S2M_DATA;
+    else if (strcmp(msg_buf, s2m_DOC) == 0)
+	id = S2M_DOC;
     return id;
 }
 
@@ -380,7 +411,9 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	msg7_entity_id[] = "entity_id",
 	msg7_data[] = "data",
 	msg7_unit_id[] = "unit_id",
-	msg7_channel_id[] = "channel_id";
+	msg7_channel_id[] = "channel_id",
+	msg6_doc_code[] = "doc_code",
+	msg6_tx_length[] = "tx_length";
 
     int id = 0;
 
@@ -418,6 +451,12 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	    id = 3;
 	if (strcmp(msg7_unit_id, msg_buf) == 0)
 	    id = 4;
+	break;
+    case S2M_DOC:
+	if (strcmp(msg6_doc_code, msg_buf) == 0)
+	    id = 1;
+	if (strcmp(msg6_tx_length, msg_buf) == 0)
+	    id = 2;
 	break;
     }
     
