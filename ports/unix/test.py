@@ -90,7 +90,7 @@ def send_datapoint(data, i2c_device):
     msg = "s2m_data"
     encoded_data = protobuf.encode(data, msg, stream).getvalue()
     enc_data_len = len(encoded_data)
-    doc_msg = bytearray([0xFF, 5, 0xFF, enc_data_len])
+    doc_msg = bytearray([0x0, 5, 0x0, enc_data_len])
     SOR_buf = get_i2c_data(i2c_device, 2)
     
     if SOR_buf is None:
