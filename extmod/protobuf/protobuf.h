@@ -10,5 +10,6 @@ typedef enum {
     /* Dataflow messages */
     M2S_SOR  = 5,
     S2M_DOC  = 6,
-    S2M_DATA = 7
+    S2M_DATA = 7,
+    COMMAND  = 8,
 } msg_id_t;

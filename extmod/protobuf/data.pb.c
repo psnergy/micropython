@@ -15,10 +15,7 @@ PB_BIND(s2m_DOC, s2m_DOC, AUTO)
 PB_BIND(m2s_CTS, m2s_CTS, AUTO)
 
 
-PB_BIND(m2s_command, m2s_command, AUTO)
-
-
-PB_BIND(s2m_command, s2m_command, AUTO)
+PB_BIND(command, command, AUTO)
 
 
 PB_BIND(_datapoint, _datapoint, AUTO)

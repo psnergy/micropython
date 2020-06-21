@@ -29,6 +29,7 @@ const char errmsg_invalid_msg[] = "Message name not found";
 const char errmsg_invalid_field[] = "Invalid field for given message";
 const char errmsg_encode_error[] = "Protobuf encoding error";
 const char errmsg_decode_error[] = "Protobuf decoding error";
+const char errmsg_unsupported[] = "This feature is not supported in this release";
 
 _subscriptions subs[32];
 int subs_idx = 0, subs_idx_max = 0;
@@ -41,6 +42,7 @@ pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream);
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count);
 bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
+bool encode_cmd_string_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
@@ -226,6 +228,42 @@ STATIC mp_obj_t protobuf_encode(mp_obj_t dict, mp_obj_t msg_str, mp_obj_t stream
 	return stream;
 	break;
     }
+    case COMMAND:
+    {
+	__asm__("nop");
+	mp_obj_dict_t *self = MP_OBJ_TO_PTR(dict);
+	mp_map_elem_t *elem = NULL;
+	size_t cur = 0;
+	
+	command cmd = command_init_zero;
+	while ((elem = dict_iter_next(self, &cur)) != NULL) {
+	    int msg_field_id = get_msg_field_id(msg_id, elem->key);
+	    switch (msg_field_id) {
+	    case 1: /* source_module_id */
+		cmd.source_module_id = mp_obj_get_int(elem->value);
+		break;
+	    case 2: /* dest_module_id */
+		cmd.dest_module_id = mp_obj_get_int(elem->value);
+		break;
+	    case 3: /* cmd_str */
+		cmd.cmd_str.funcs.encode = encode_cmd_string_callback;
+		cmd.cmd_str.arg = (void*)mp_obj_str_get_str(elem->value);
+		break;
+	    case 4: /* cmd_bytes */
+		mp_raise_msg(&mp_type_ValueError, errmsg_unsupported);
+		break;
+	    default:
+		mp_raise_msg(&mp_type_ValueError, errmsg_invalid_field);
+		break;
+	    }
+	}
+	pb_ostream_t cmd_ostream = pb_ostream_from_mp_stream(stream);
+	if (!pb_encode(&cmd_ostream, command_fields, &cmd)) {
+	    mp_raise_msg(&mp_type_ValueError, errmsg_encode_error);
+	}
+	return stream;
+	break;
+    }
     default:
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);	
     }
@@ -364,6 +402,16 @@ bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, v
     return true;
 }
 
+bool encode_cmd_string_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg)
+{   
+    if (ostream != NULL && field->tag == command_cmd_str_tag) {
+	if (!pb_encode_tag_for_field(ostream, field))
+	    return false;
+	return pb_encode_string(ostream, (const unsigned char*)arg[0], strlen((char*)arg[0]));
+    }
+    return true;
+}
+
 int get_msg_id(mp_obj_t msg)
 {    
     const char m2sMDR_req[] = "m2s_MDR_request",
@@ -372,7 +420,8 @@ int get_msg_id(mp_obj_t msg)
 	s2mMDR_response[] = "s2m_MDR_response",
 	m2sSOR[] = "m2s_SOR",
 	s2m_data[] = "s2m_data",
-	s2m_DOC[] = "s2m_DOC";
+	s2m_DOC[] = "s2m_DOC",
+	command[] = "command";
     
     int id = 0; /* Default case is no matching ID */
     
@@ -393,6 +442,8 @@ int get_msg_id(mp_obj_t msg)
 	id = S2M_DATA;
     else if (strcmp(msg_buf, s2m_DOC) == 0)
 	id = S2M_DOC;
+    else if (strcmp(msg_buf, command) == 0)
+	id = COMMAND;
     return id;
 }
 
@@ -413,7 +464,11 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
 	msg7_unit_id[] = "unit_id",
 	msg7_channel_id[] = "channel_id",
 	msg6_doc_code[] = "doc_code",
-	msg6_tx_length[] = "tx_length";
+	msg6_tx_length[] = "tx_length",
+	msg8_source_module_id[] = "source_module_id",
+	msg8_dest_module_id[] = "dest_module_id",
+	msg8_cmd_str[] = "cmd_str",
+	msg8_cmd_bytes[] = "cmd_bytes";
 
     int id = 0;
 
@@ -445,18 +500,28 @@ int get_msg_field_id(int msg_id, mp_obj_t msg_field)
     case S2M_DATA:
 	if (strcmp(msg7_entity_id, msg_buf) == 0)
 	    id = 1;
-	if (strcmp(msg7_data, msg_buf) == 0)
+	else if (strcmp(msg7_data, msg_buf) == 0)
 	    id = 2;
-	if (strcmp(msg7_channel_id, msg_buf) == 0)
+	else if (strcmp(msg7_channel_id, msg_buf) == 0)
 	    id = 3;
-	if (strcmp(msg7_unit_id, msg_buf) == 0)
+	else if (strcmp(msg7_unit_id, msg_buf) == 0)
 	    id = 4;
 	break;
     case S2M_DOC:
 	if (strcmp(msg6_doc_code, msg_buf) == 0)
 	    id = 1;
-	if (strcmp(msg6_tx_length, msg_buf) == 0)
+	else if (strcmp(msg6_tx_length, msg_buf) == 0)
 	    id = 2;
+	break;
+    case COMMAND:
+	if (strcmp(msg8_source_module_id, msg_buf) == 0)
+	    id = 1;
+	else if (strcmp(msg8_dest_module_id, msg_buf) == 0)
+	    id = 2;
+	else if (strcmp(msg8_cmd_str, msg_buf) == 0)
+	    id = 3;
+	else if (strcmp(msg8_cmd_bytes, msg_buf) == 0)
+	    id = 4;
 	break;
     }
     
