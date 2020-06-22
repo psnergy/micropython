@@ -14,6 +14,8 @@
 #include "py/stream.h"
 #include "py/runtime.h"
 #include "py/objlist.h"
+#include "py/objstr.h"
+#include "py/objstringio.h"
 #include "pb_common.h"
 #include "pb_encode.h"
 #include "pb_decode.h"
@@ -34,7 +36,10 @@ const char errmsg_unsupported[] = "This feature is not supported in this release
 _subscriptions subs[32];
 int subs_idx = 0, subs_idx_max = 0;
 int num_datapoints = 0;               /*< This global helps the data encoding callback */
-_datapoint datapoints[16];    
+_datapoint datapoints[16];
+uint8_t str_ptr = 0;
+pb_byte_t str_buf[128] = {0};
+
 STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur);
 STATIC mp_obj_t protobuf_encode(mp_obj_t obj, mp_obj_t stream, mp_obj_t msg_str);
 pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream);
@@ -43,6 +48,7 @@ static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t coun
 bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 bool encode_cmd_string_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
+bool decode_cmd_string_callback(pb_istream_t *istream, const pb_field_t *field, void **args);
 int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
@@ -281,6 +287,7 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 
     switch (msg_id) {
     case M2S_SOR:
+    {
 	__asm__("nop");
 	char sor_code_key[] = "SOR_code";
 	pb_istream_t istream = pb_istream_from_mp_stream(stream);
@@ -294,6 +301,37 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	mp_obj_t out_dict = mp_obj_dict_store(dict, sor_key, sor_code);
 	return out_dict;
 	break;
+    }
+    case COMMAND:
+    {
+	__asm__("nop");
+	mp_obj_stringio_t *self = MP_OBJ_TO_PTR(stream);
+	command cmd = command_init_zero;
+	cmd.cmd_str.funcs.decode=decode_cmd_string_callback;	
+       
+	char *cmd_buf = self->vstr->buf;
+	pb_istream_t cmd_istream = pb_istream_from_buffer((unsigned char*)cmd_buf, self->vstr->len);
+	str_ptr=0;
+
+	if (pb_decode(&cmd_istream, command_fields, &cmd) != true) {
+	    printf("ERROR: %s\n", cmd_istream.errmsg);
+	    mp_raise_msg(&mp_type_ValueError, errmsg_decode_error);
+	}
+
+	mp_obj_t source_module_id = mp_obj_new_int(cmd.source_module_id);
+	mp_obj_t *source_module_id_key = mp_obj_new_str("source_module_id", strlen("source_module_id"));
+
+	mp_obj_t dest_module_id = mp_obj_new_int(cmd.dest_module_id);
+	mp_obj_t *dest_module_id_key = mp_obj_new_str("dest_module_id", strlen("dest_module_id"));
+	
+	mp_obj_t *cmd_str = mp_obj_new_str((char*)str_buf, strlen((char*)str_buf));
+	mp_obj_t *cmd_str_key = mp_obj_new_str("cmd_str", strlen("cmd_str"));
+	
+	dict=mp_obj_dict_store(dict, source_module_id_key, source_module_id);
+	dict=mp_obj_dict_store(dict, dest_module_id_key, dest_module_id);
+	dict=mp_obj_dict_store(dict, cmd_str_key, cmd_str);
+	return dict;
+    }
     default:
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
     }
@@ -309,7 +347,7 @@ static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t coun
     return true;
 }
 
-static bool read_callback(pb_istream_t *stream, const uint8_t *buf, size_t count) {
+static bool read_callback(pb_istream_t *stream, pb_byte_t *buf, size_t count) {
     int errcode;    
     mp_stream_rw(stream->state, (void*)buf, (mp_uint_t) count, &errcode, MP_STREAM_RW_READ);
     if (errcode > 0) {
@@ -324,7 +362,7 @@ pb_ostream_t pb_ostream_from_mp_stream(mp_obj_t stream) {
 }
 
 pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream) {
-    pb_istream_t pb_stream = {&read_callback, (void*)stream, 100};
+    pb_istream_t pb_stream = {&read_callback, (void*)stream, 10};
     return pb_stream;
 }
 
@@ -408,6 +446,15 @@ bool encode_cmd_string_callback(pb_ostream_t *ostream, const pb_field_t *field, 
 	if (!pb_encode_tag_for_field(ostream, field))
 	    return false;
 	return pb_encode_string(ostream, (const unsigned char*)arg[0], strlen((char*)arg[0]));
+    }
+    return true;
+}
+
+bool decode_cmd_string_callback(pb_istream_t *istream, const pb_field_t *field, void **args)
+{
+    while (istream->bytes_left) {
+	if (!pb_read(istream, &str_buf[str_ptr++], 1))
+	    return false;
     }
     return true;
 }
