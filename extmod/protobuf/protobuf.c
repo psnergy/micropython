@@ -34,7 +34,7 @@ const char errmsg_decode_error[] = "Protobuf decoding error";
 const char errmsg_unsupported[] = "This feature is not supported in this release";
 
 _subscriptions subs[32];
-int subs_idx = 0, subs_idx_max = 0;
+int subs_idx = 0, subs_idx_max = 0, data_idx = 0;
 int num_datapoints = 0;               /*< This global helps the data encoding callback */
 _datapoint datapoints[16];
 uint8_t str_ptr = 0;
@@ -47,8 +47,10 @@ pb_istream_t pb_istream_from_mp_stream(mp_obj_t stream);
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count);
 bool encode_subscription_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
+bool decode_data_callback(pb_istream_t *istream, const pb_field_t *field, void **args);
 bool encode_cmd_string_callback(pb_ostream_t *ostream, const pb_field_t *field, void * const *arg);
 bool decode_cmd_string_callback(pb_istream_t *istream, const pb_field_t *field, void **args);
+
 int get_msg_id(mp_obj_t msg);
 int get_msg_field_id(int msg_id, mp_obj_t msg_field);
 
@@ -302,6 +304,58 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	return out_dict;
 	break;
     }
+    case S2M_DATA:
+    {
+	__asm__("nop");
+	mp_obj_stringio_t *self = MP_OBJ_TO_PTR(stream);
+	char *data_buf = self->vstr->buf;
+	s2m_data data_message = s2m_data_init_default;
+	_datapoint datapoints[16];
+	data_idx = 0;
+	
+	data_message.datapoints.funcs.decode = decode_data_callback;
+	data_message.datapoints.arg = (void*)datapoints;
+	pb_istream_t data_istream = pb_istream_from_buffer((unsigned char*)data_buf,
+							   self->vstr->len);
+	if (!pb_decode(&data_istream, s2m_data_fields, &data_message)){
+	    printf("ERROR: %s\n", data_istream.errmsg);
+	    mp_raise_msg(&mp_type_ValueError, errmsg_decode_error);
+	}
+
+	mp_obj_t entity_id_key = mp_obj_new_str("entity_id", strlen("entity_id"));
+	mp_obj_t data_key = mp_obj_new_str("data", strlen("data"));
+	mp_obj_t channel_id_key = mp_obj_new_str("channel_id", strlen("channel_id"));
+	mp_obj_t unit_id_key = mp_obj_new_str("unit_id", strlen("unit_id"));
+	mp_obj_t timestamp_key = mp_obj_new_str("timestamp", strlen("timestamp"));
+	mp_obj_t num_datapoints_key = mp_obj_new_str("num_datapoints",
+						     strlen("num_datapoints"));	
+	for (int x = 0; x < data_idx; x++) {
+	    mp_obj_t loc_dict = mp_obj_new_dict(0);
+	    mp_obj_t data_entry_key = mp_obj_new_int(x);
+	    mp_obj_t entity_id = mp_obj_new_int(datapoints[x].entity_id);
+	    mp_obj_t data = mp_obj_new_float(datapoints[x].data);
+	    loc_dict = mp_obj_dict_store(loc_dict, entity_id_key, entity_id);
+	    loc_dict = mp_obj_dict_store(loc_dict, data_key, data);
+	    if (datapoints[x].has_channel_id) {
+		mp_obj_t channel_id = mp_obj_new_int(datapoints[x].channel_id);
+		loc_dict = mp_obj_dict_store(loc_dict, channel_id_key, channel_id);
+	    }
+	    if (datapoints[x].has_unit_id) {
+		mp_obj_t unit_id = mp_obj_new_int(datapoints[x].unit_id);
+		loc_dict = mp_obj_dict_store(loc_dict, unit_id_key, unit_id);
+	    }
+	    if (datapoints[x].has_timestamp) {
+		mp_obj_t timestamp = mp_obj_new_int(datapoints[x].timestamp);
+		loc_dict = mp_obj_dict_store(loc_dict, timestamp_key, timestamp);
+	    }
+
+	    mp_obj_t num_datapoints = mp_obj_new_int(data_idx);
+	    dict = mp_obj_dict_store(dict, num_datapoints_key, num_datapoints);
+	    
+	    dict = mp_obj_dict_store(dict, data_entry_key, loc_dict);
+	}
+	return dict;
+    }
     case COMMAND:
     {
 	__asm__("nop");
@@ -310,7 +364,8 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	cmd.cmd_str.funcs.decode=decode_cmd_string_callback;	
        
 	char *cmd_buf = self->vstr->buf;
-	pb_istream_t cmd_istream = pb_istream_from_buffer((unsigned char*)cmd_buf, self->vstr->len);
+	pb_istream_t cmd_istream = pb_istream_from_buffer((unsigned char*)cmd_buf,
+							  self->vstr->len);
 	str_ptr=0;
 
 	if (pb_decode(&cmd_istream, command_fields, &cmd) != true) {
@@ -438,6 +493,36 @@ bool encode_datapoint_callback(pb_ostream_t *ostream, const pb_field_t *field, v
     }
     else
 	return false;
+    return true;
+}
+
+bool decode_data_callback(pb_istream_t *istream, const pb_field_t *field, void **args)
+{
+    _datapoint loc_datapoint = _datapoint_init_zero;
+    _datapoint *datapoint = *args;
+
+    if (!pb_decode(istream, _datapoint_fields, &loc_datapoint))
+	return false;
+
+    datapoint[data_idx].data = datapoint[data_idx].entity_id = 0;
+    
+    datapoint[data_idx].entity_id = loc_datapoint.entity_id;
+    datapoint[data_idx].data      = loc_datapoint.data;
+    
+    if (loc_datapoint.has_channel_id) {
+	datapoint[data_idx].has_channel_id = true;
+	datapoint[data_idx].channel_id     = loc_datapoint.channel_id;
+    }
+    if (loc_datapoint.has_unit_id) {
+	datapoint[data_idx].has_unit_id = true;
+	datapoint[data_idx].unit_id     = loc_datapoint.unit_id;
+    }
+    if (loc_datapoint.has_timestamp) {
+	datapoint[data_idx].has_timestamp = true;
+	datapoint[data_idx].timestamp    = loc_datapoint.timestamp;
+    }
+
+    data_idx++;
     return true;
 }
 
