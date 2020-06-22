@@ -319,7 +319,8 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	}
 
 	mp_obj_t source_module_id = mp_obj_new_int(cmd.source_module_id);
-	mp_obj_t *source_module_id_key = mp_obj_new_str("source_module_id", strlen("source_module_id"));
+	mp_obj_t *source_module_id_key = mp_obj_new_str("source_module_id",
+							strlen("source_module_id"));
 
 	mp_obj_t dest_module_id = mp_obj_new_int(cmd.dest_module_id);
 	mp_obj_t *dest_module_id_key = mp_obj_new_str("dest_module_id", strlen("dest_module_id"));
@@ -348,7 +349,7 @@ static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t coun
 }
 
 static bool read_callback(pb_istream_t *stream, pb_byte_t *buf, size_t count) {
-    int errcode;    
+    int errcode;
     mp_stream_rw(stream->state, (void*)buf, (mp_uint_t) count, &errcode, MP_STREAM_RW_READ);
     if (errcode > 0) {
 	return false;
