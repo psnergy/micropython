@@ -388,6 +388,11 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	dict=mp_obj_dict_store(dict, cmd_str_key, cmd_str);
 	return dict;
     }
+    case MDR:
+    {
+	
+	break;
+    }
     default:
 	mp_raise_msg(&mp_type_ValueError, errmsg_invalid_msg);
     }

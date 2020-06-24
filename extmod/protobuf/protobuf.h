@@ -12,4 +12,5 @@ typedef enum {
     S2M_DOC  = 6,
     S2M_DATA = 7,
     COMMAND  = 8,
+    MDR      = 9,
 } msg_id_t;
