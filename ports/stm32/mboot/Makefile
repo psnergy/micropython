@@ -34,6 +34,7 @@ STFLASH ?= st-flash
 OPENOCD ?= openocd
 OPENOCD_CONFIG ?= boards/openocd_stm32f4.cfg
 STARTUP_FILE ?= lib/stm32lib/CMSIS/STM32$(MCU_SERIES_UPPER)xx/Source/Templates/gcc/startup_$(CMSIS_MCU_LOWER).o
+SYSTEM_FILE ?= lib/stm32lib/CMSIS/STM32$(MCU_SERIES_UPPER)xx/Source/Templates/system_stm32$(MCU_SERIES)xx.o
 
 CROSS_COMPILE ?= arm-none-eabi-
 
@@ -54,6 +55,11 @@ CFLAGS_MCU_f4 = $(CFLAGS_CORTEX_M) -mtune=cortex-m4 -mcpu=cortex-m4
 CFLAGS_MCU_f7 = $(CFLAGS_CORTEX_M) -mtune=cortex-m7 -mcpu=cortex-m7
 CFLAGS_MCU_h7 = $(CFLAGS_CORTEX_M) -mtune=cortex-m7 -mcpu=cortex-m7
 CFLAGS_MCU_l4 = $(CFLAGS_CORTEX_M) -mtune=cortex-m4 -mcpu=cortex-m4
+CFLAGS_MCU_wb = $(CFLAGS_CORTEX_M) -mtune=cortex-m4 -mcpu=cortex-m4
+
+# Standard C functions like memset need to be compiled with special flags so
+# the compiler does not optimise these functions in terms of themselves.
+CFLAGS_BUILTIN ?= -ffreestanding -fno-builtin -fno-lto
 
 CFLAGS = $(INC) -Wall -Wpointer-arith -Wdouble-promotion -Wfloat-conversion -Werror -std=gnu99 -nostdlib $(CFLAGS_MOD) $(CFLAGS_EXTRA)
 CFLAGS += -D$(CMSIS_MCU)
@@ -82,6 +88,7 @@ else
 COPT += -Os -DNDEBUG
 endif
 
+$(BUILD)/lib/libc/string0.o: CFLAGS += $(CFLAGS_BUILTIN)
 LIB_SRC_C = \
 	lib/libc/string0.c \
 	lib/oofatfs/ff.c \
@@ -99,15 +106,18 @@ SRC_C = \
 	drivers/bus/softspi.c \
 	drivers/bus/softqspi.c \
 	drivers/memory/spiflash.c \
-	ports/stm32/i2cslave.c \
-	ports/stm32/qspi.c \
+	ports/stm32/flash.c \
 	ports/stm32/flashbdev.c \
+	ports/stm32/i2cslave.c \
+	ports/stm32/powerctrlboot.c \
+	ports/stm32/qspi.c \
 	ports/stm32/spibdev.c \
 	ports/stm32/usbd_conf.c \
 	$(wildcard $(BOARD_DIR)/*.c)
 
 SRC_O = \
 	$(STARTUP_FILE) \
+	$(SYSTEM_FILE) \
 	ports/stm32/resethandler.o \
 
 $(BUILD)/$(HAL_DIR)/Src/stm32$(MCU_SERIES)xx_ll_usb.o: CFLAGS += -Wno-attributes

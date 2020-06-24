@@ -407,8 +407,8 @@ typedef struct _mp_rom_map_elem_t {
 
 typedef struct _mp_map_t {
     size_t all_keys_are_qstrs : 1;
-    size_t is_fixed : 1;    // a fixed array that can't be modified; must also be ordered
-    size_t is_ordered : 1;  // an ordered array
+    size_t is_fixed : 1;    // if set, table is fixed/read-only and can't be modified
+    size_t is_ordered : 1;  // if set, table is an ordered array, not a hash map
     size_t used : (8 * sizeof(size_t) - 3);
     size_t alloc;
     mp_map_elem_t *table;
@@ -708,6 +708,7 @@ extern const struct _mp_obj_exception_t mp_const_GeneratorExit_obj;
 #define mp_obj_is_int(o) (mp_obj_is_small_int(o) || mp_obj_is_type(o, &mp_type_int))
 #define mp_obj_is_str(o) (mp_obj_is_qstr(o) || mp_obj_is_type(o, &mp_type_str))
 #define mp_obj_is_str_or_bytes(o) (mp_obj_is_qstr(o) || (mp_obj_is_obj(o) && ((mp_obj_base_t *)MP_OBJ_TO_PTR(o))->type->binary_op == mp_obj_str_binary_op))
+#define mp_obj_is_dict_or_ordereddict(o) (mp_obj_is_obj(o) && ((mp_obj_base_t *)MP_OBJ_TO_PTR(o))->type->make_new == mp_obj_dict_make_new)
 #define mp_obj_is_fun(o) (mp_obj_is_obj(o) && (((mp_obj_base_t *)MP_OBJ_TO_PTR(o))->type->name == MP_QSTR_function))
 
 mp_obj_t mp_obj_new_type(qstr name, mp_obj_t bases_tuple, mp_obj_t locals_dict);
@@ -890,11 +891,13 @@ typedef struct _mp_obj_dict_t {
     mp_obj_base_t base;
     mp_map_t map;
 } mp_obj_dict_t;
+mp_obj_t mp_obj_dict_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args);
 void mp_obj_dict_init(mp_obj_dict_t *dict, size_t n_args);
 size_t mp_obj_dict_len(mp_obj_t self_in);
 mp_obj_t mp_obj_dict_get(mp_obj_t self_in, mp_obj_t index);
 mp_obj_t mp_obj_dict_store(mp_obj_t self_in, mp_obj_t key, mp_obj_t value);
 mp_obj_t mp_obj_dict_delete(mp_obj_t self_in, mp_obj_t key);
+mp_obj_t mp_obj_dict_copy(mp_obj_t self_in);
 static inline mp_map_t *mp_obj_dict_get_map(mp_obj_t dict) {
     return &((mp_obj_dict_t *)MP_OBJ_TO_PTR(dict))->map;
 }
