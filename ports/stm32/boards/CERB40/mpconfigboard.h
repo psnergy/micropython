@@ -1,14 +1,14 @@
 #define MICROPY_HW_BOARD_NAME       "Cerb40"
 #define MICROPY_HW_MCU_NAME         "STM32F405RG"
 
-#define MICROPY_HW_HAS_FLASH        (1)
+#define MICROPY_HW_HAS_FLASH        (0)
 #define MICROPY_HW_ENABLE_RNG       (1)
 #define MICROPY_HW_ENABLE_RTC       (1)
 #define MICROPY_HW_ENABLE_DAC       (1)
 #define MICROPY_HW_ENABLE_USB       (1)
 
 // HSE is 12MHz
-#define MICROPY_HW_CLK_PLLM (12)
+#define MICROPY_HW_CLK_PLLM (8)
 #define MICROPY_HW_CLK_PLLN (336)
 #define MICROPY_HW_CLK_PLLP (RCC_PLLP_DIV2)
 #define MICROPY_HW_CLK_PLLQ (7)

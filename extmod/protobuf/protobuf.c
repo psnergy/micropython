@@ -400,7 +400,7 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 }
 
 static bool write_callback(pb_ostream_t *stream, const uint8_t *buf, size_t count) {
-    int errcode;    
+    int errcode;
     mp_stream_rw(stream->state, (void*)buf, (mp_uint_t) count, &errcode, MP_STREAM_RW_WRITE);
     if (errcode > 0) {
 	return false;
