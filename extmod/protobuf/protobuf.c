@@ -318,7 +318,6 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	pb_istream_t data_istream = pb_istream_from_buffer((unsigned char*)data_buf,
 							   self->vstr->len);
 	if (!pb_decode(&data_istream, s2m_data_fields, &data_message)){
-	    printf("ERROR: %s\n", data_istream.errmsg);
 	    mp_raise_msg(&mp_type_ValueError, errmsg_decode_error);
 	}
 
@@ -369,7 +368,6 @@ STATIC mp_obj_t protobuf_decode(mp_obj_t msg_str, mp_obj_t stream) {
 	str_ptr=0;
 
 	if (pb_decode(&cmd_istream, command_fields, &cmd) != true) {
-	    printf("ERROR: %s\n", cmd_istream.errmsg);
 	    mp_raise_msg(&mp_type_ValueError, errmsg_decode_error);
 	}
 

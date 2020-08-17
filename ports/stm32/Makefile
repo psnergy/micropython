@@ -1,6 +1,7 @@
 # Select the board to build for: if not given on the command line,
 # then default to PYBV10.
-BOARD ?= CERB40
+BOARD ?= psnergy-pyboard
+USER_C_MODULES=../../extmod
 
 # If the build directory is not given, make it reflect the board name.
 BUILD ?= build-$(BOARD)
