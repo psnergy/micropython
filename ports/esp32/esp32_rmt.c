@@ -96,7 +96,7 @@ STATIC mp_obj_t esp32_rmt_make_new(const mp_obj_type_t *type, size_t n_args, siz
     self->carrier_freq = carrier_freq;
     self->loop_en = false;
 
-    rmt_config_t config;
+    rmt_config_t config = {0};
     config.rmt_mode = RMT_MODE_TX;
     config.channel = (rmt_channel_t)self->channel_id;
     config.gpio_num = self->pin;
@@ -218,6 +218,10 @@ STATIC mp_obj_t esp32_rmt_write_pulses(size_t n_args, const mp_obj_t *pos_args, 
     mp_obj_get_array(pulses, &pulses_length, &pulses_ptr);
 
     mp_uint_t num_items = (pulses_length / 2) + (pulses_length % 2);
+    if (self->loop_en && num_items > 63) {
+        mp_raise_ValueError(MP_ERROR_TEXT("too many pulses for loop"));
+    }
+
     if (num_items > self->num_items) {
         self->items = (rmt_item32_t *)m_realloc(self->items, num_items * sizeof(rmt_item32_t *));
         self->num_items = num_items;
@@ -241,12 +245,12 @@ STATIC mp_obj_t esp32_rmt_write_pulses(size_t n_args, const mp_obj_t *pos_args, 
             check_esp_err(rmt_set_tx_loop_mode(self->channel_id, false));
         }
         check_esp_err(rmt_wait_tx_done(self->channel_id, portMAX_DELAY));
-        check_esp_err(rmt_set_tx_intr_en(self->channel_id, false));
     }
 
     check_esp_err(rmt_write_items(self->channel_id, self->items, num_items, false /* non-blocking */));
 
     if (self->loop_en) {
+        check_esp_err(rmt_set_tx_intr_en(self->channel_id, false));
         check_esp_err(rmt_set_tx_loop_mode(self->channel_id, true));
     }
 
